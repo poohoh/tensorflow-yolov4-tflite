@@ -52,13 +52,26 @@ def main(_argv):
         output_details = interpreter.get_output_details()
         print(input_details)
         print(output_details)
+
+        # 기본 yolov4 모델이 아니면 입력 이미지의 shape를 변경
+        weight_name = FLAGS.weights
+        if not weight_name.endswith('yolov4-416-fp16.tflite'):
+            images_data = np.transpose(images_data, (0, 3, 2, 1))
+
+        # 모델 실행
         interpreter.set_tensor(input_details[0]['index'], images_data)
         interpreter.invoke()
         pred = [interpreter.get_tensor(output_details[i]['index']) for i in range(len(output_details))]
+
         if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
             boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25, input_shape=tf.constant([input_size, input_size]))
-        else:
-            boxes, pred_conf = filter_boxes(pred[0], pred[1], score_threshold=0.25, input_shape=tf.constant([input_size, input_size]))
+        else:  # 기본 yolov4 모델
+            if weight_name.endswith('yolov4-416-fp16.tflite'):
+                boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25, input_shape=tf.constant([input_size, input_size]))
+            else:  # vd, lpd, lpr
+                pred[0] = np.squeeze(pred[0], axis=2)
+                boxes, pred_conf = filter_boxes(pred[0], pred[1], score_threshold=0.25,
+                                                input_shape=tf.constant([input_size, input_size]))
     else:
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
         infer = saved_model_loaded.signatures['serving_default']
